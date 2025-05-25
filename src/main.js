@@ -17,6 +17,11 @@ let sphereIndexBuffer, cylinderIndexBuffer;
 let sphereNormalBuffer, cylinderNormalBuffer;
 let sphereData, cylinderData;
 
+// Texture
+let texturedSphereData;
+let texturedSphereBuffer, texturedSphereIndexBuffer, texturedSphereNormalBuffer, texturedSphereTexCoordBuffer;
+let uTexture, uUseTexture, texture;
+
 let uLightPosition, uLightColor, uAmbientLight, uDiffuseStrength;
 
 let lastTime = 0;
@@ -143,6 +148,104 @@ function setSaturn() { changeEnvironment('saturn'); }
 function setUranus() { changeEnvironment('uranus'); }
 function setNeptune() { changeEnvironment('neptune'); }
 
+// Texture
+function addTexturedSphereInit() {
+    texturedSphereData = createTexturedSphere(0.3, 24, 24);
+
+    texturedSphereBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texturedSphereBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texturedSphereData.vertices), gl.STATIC_DRAW);
+
+    texturedSphereIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, texturedSphereIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(texturedSphereData.indices), gl.STATIC_DRAW);
+
+    texturedSphereNormalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texturedSphereNormalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texturedSphereData.normals), gl.STATIC_DRAW);
+
+    texturedSphereTexCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texturedSphereTexCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texturedSphereData.texCoords), gl.STATIC_DRAW);
+
+    createCheckTexture();
+
+    uTexture = gl.getUniformLocation(program, "uTexture");
+    uUseTexture = gl.getUniformLocation(program, "uUseTexture");
+}
+
+function createCheckTexture() {
+    const size = 64;
+    const data = new Uint8Array(size * size * 4);
+
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+            const index = (i * size + j) * 4;
+            const tmp = (Math.floor(i / 8) + Math.floor(j / 8)) % 2;
+
+            if (tmp) {
+                data[index] = 100;
+                data[index + 1] = 100;
+                data[index + 2] = 100;
+            } else {
+                data[index] = 250;
+                data[index + 1] = 250;
+                data[index + 2] = 10;
+            }
+            data[index + 3] = 255; 
+        }
+    }
+
+    texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+}
+
+function renderTexturedSphere() {
+    gl.useProgram(program);
+
+    const spherePosition = translate(1.0, 0.3, 0.0);
+    const mvMatrix = mult(modelViewMatrix, spherePosition);
+    
+    gl.uniformMatrix4fv(uModelViewMatrix, false, flatten(mvMatrix));
+    gl.uniformMatrix4fv(uProjectionMatrix, false, flatten(projectionMatrix));
+    
+    const normalMatrix = transpose(inverse4(mvMatrix));
+    gl.uniformMatrix4fv(uNormalMatrix, false, flatten(normalMatrix));
+
+    gl.uniform1i(uUseTexture, 1); // Enable texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.uniform1i(uTexture, 0);
+
+    const vPosition = gl.getAttribLocation(program, "vPosition");
+    gl.bindBuffer(gl.ARRAY_BUFFER, texturedSphereBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    const vNormal = gl.getAttribLocation(program, "vNormal");
+    gl.bindBuffer(gl.ARRAY_BUFFER, texturedSphereNormalBuffer);
+    gl.vertexAttribPointer(vNormal, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vNormal);
+
+    const vTexCoord = gl.getAttribLocation(program, "vTexCoord");
+    if (vTexCoord !== -1) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, texturedSphereTexCoordBuffer);
+        gl.vertexAttribPointer(vTexCoord, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(vTexCoord);
+    }
+
+    // Draw
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, texturedSphereIndexBuffer);
+    gl.drawElements(gl.TRIANGLES, texturedSphereData.indices.length, gl.UNSIGNED_SHORT, 0);
+    
+    // Disable texture for next renders
+    gl.uniform1i(uUseTexture, 0);
+}
 
 window.onload = function init() {
     const canvas = document.getElementById("glCanvas");
@@ -197,22 +300,23 @@ window.onload = function init() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cylinderIndexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cylinderData.indices), gl.STATIC_DRAW);
 
+    // Textured sphere
+    addTexturedSphereInit();
+
     root = buildTreeFromHierarchy(JOINTS, hierarchy, renderJoint);
 
     modelViewMatrix = lookAt(eye, at, up);
     projectionMatrix = perspective(60, canvas.width / canvas.height, 0.1, 10.0);
 
-    //animationSystem.startAnimation("greeting", 2000, true);
-    //animationSystem.startAnimation("frontFlip", null, false);
-
-    setMars();
-    animationSystem.startAnimation("spaceWalk", null, false);
+    setEarth();
+    animationSystem.startAnimation("frontFlip", null, false);
 
     render();
 }
 
 function renderJoint(worldMatrix, jointName) {
     gl.useProgram(program);
+    gl.uniform1i(uUseTexture, 0);
 
     let scale = 1.0;
 
@@ -239,12 +343,19 @@ function renderJoint(worldMatrix, jointName) {
     gl.vertexAttribPointer(vNormal, 3, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(vNormal);
 
+    // Disable texture coordinate attribute if it exists
+    const vTexCoord = gl.getAttribLocation(program, "vTexCoord");
+    if (vTexCoord !== -1) {
+        gl.disableVertexAttribArray(vTexCoord);
+    }
+
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer);
     gl.drawElements(gl.TRIANGLES, sphereData.indices.length, gl.UNSIGNED_SHORT, 0);
 }
 
 function renderBone(from, to, parentName, childName) {
     gl.useProgram(program);
+    gl.uniform1i(uUseTexture, 0);
 
     const isSpine = parentName === "SPINE" || parentName === "SPINE1" || childName === "SPINE";
     const isLeg = parentName.includes("LEG") || parentName.includes("UPLEG") || childName === "NECK" || parentName === "NECK" || childName.includes("UPLEG");
@@ -255,7 +366,7 @@ function renderBone(from, to, parentName, childName) {
         radius = 0.2;
     }
     else if (isLeg) {
-	radius = 0.1;
+        radius = 0.1;
     }
 
     const customCylinder = createClosedCylinder(radius, radius, 1.0, 12, 1);
@@ -290,10 +401,15 @@ function renderBone(from, to, parentName, childName) {
     gl.vertexAttribPointer(vNormal, 3, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(vNormal);
 
+    // Disable texture coordinate attribute if it exists
+    const vTexCoord = gl.getAttribLocation(program, "vTexCoord");
+    if (vTexCoord !== -1) {
+        gl.disableVertexAttribArray(vTexCoord);
+    }
+
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.drawElements(gl.TRIANGLES, customCylinder.indices.length, gl.UNSIGNED_SHORT, 0);
 }
-
 
 function render(time = 0) {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -305,6 +421,8 @@ function render(time = 0) {
     if (result) animationSystem.applyAnimationToTree(root, result.rotations, result.translations);
 
     traverse(root);
+
+    renderTexturedSphere();
 
     requestAnimationFrame(render);
 }

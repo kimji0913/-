@@ -281,3 +281,67 @@ function createClosedCylinder(radiusTop, radiusBottom, height, radialSegments, h
         indices: indices
     };
 }
+
+// Texture가 적용된 구 
+function createTexturedSphere(radius, latBands, longBands) {
+    let vertices = [];
+    let normals = [];
+    let texCoords = [];
+    let indices = [];
+
+    for (let lat = 0; lat <= latBands; lat++) {
+        const theta = lat * Math.PI / latBands;
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+
+        for (let long = 0; long <= longBands; long++) {
+            const phi = long * 2 * Math.PI / longBands;
+            const sinPhi = Math.sin(phi);
+            const cosPhi = Math.cos(phi);
+
+            const x = cosPhi * sinTheta;
+            const y = cosTheta;
+            const z = sinPhi * sinTheta;
+
+            // 버텍스 좌표
+            vertices.push(radius * x);
+            vertices.push(radius * y);
+            vertices.push(radius * z);
+            vertices.push(1.0);
+
+            // 노말 벡터
+            normals.push(x);
+            normals.push(y);
+            normals.push(z);
+
+            // 텍스처 좌표 (UV 좌표)
+            const u = long / longBands;
+            const v = lat / latBands;
+            texCoords.push(u);
+            texCoords.push(v);
+        }
+    }
+    
+    // 인덱스 생성
+    for (let lat = 0; lat < latBands; lat++) {
+        for (let long = 0; long < longBands; long++) {
+            const first = (lat * (longBands + 1)) + long;
+            const second = first + longBands + 1;
+
+            indices.push(first);
+            indices.push(second);
+            indices.push(first + 1);
+
+            indices.push(second);
+            indices.push(second + 1);
+            indices.push(first + 1);
+        }
+    }
+
+    return {
+        vertices: vertices,
+        normals: normals,
+        texCoords: texCoords,
+        indices: indices
+    };
+}
